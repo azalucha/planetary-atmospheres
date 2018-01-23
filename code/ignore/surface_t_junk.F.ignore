@@ -1,0 +1,60 @@
+C SLAB MODEL FOR TESTING
+C  thermodynamics loop counts down from Nr.  Do calculation at first
+C  instance.
+CC      IF(kLev .EQ. Nr) THEN
+CC         IF(initrad(i,j,bi,bj) .EQ. 1. .OR.
+CC     &            MOD(myTime,radTimeStep).EQ.0.) THEN
+CC          initrad(i,j,bi,bj)=0.
+CC          tfrostsamz=1./(1./referenceTempInFrostEqn - atm_Rd/atm_L*
+CC     &     LOG(Ro_Surf(i,j,bi,bj)
+CC     &     /referencePresInFrostEqn))
+CC          IF(plutoSurfTFixedToFrost) THEN
+CC           surfaceT(i,j,bi,bj)=tfrostsamz
+CCC          ELSE
+C For Pluto just assume solar input is
+C the only thing coming in (no IR atmosphere term, no diffuse radiation from
+C 7.6 um emission
+CCC           CALL GET_QO(i,j,bi,bj,lssol,myTime,solarconstant,
+CCC     &                            albedoany(i,j,bi,bj),qo)
+CCC           IF(selectAddFluid .EQ. 0) THEN
+CCC            surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+CCC     &       radTimeStep/cpOfSoil/soilThickness
+CCC     &       /rhoOfSoil*(qo-emissivity(i,j,bi,bj)*
+CCC     &       stephanBoltzmannConstant*
+CCC     &       surfaceTPrime(i,j,bi,bj)**4.)
+CCC           ELSE
+CCC            iceThickness=massonground(i,j,bi,bj)/
+CCC     &         rA(i,j,bi,bj)*deltaT/rhoOfIce
+C no ice on ground (surface layer all soil)
+CCC            IF (iceThickness .LE. 0.) THEN
+CCC             surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+CCC     &        radTimeStep/cpOfSoil/soilThickness
+CCC     &        /rhoOfSoil*(qo-emissivity(i,j,bi,bj)*
+CCC     &        stephanBoltzmannConstant*
+CCC     &        surfaceTPrime(i,j,bi,bj)**4.)
+CCC            ELSE
+C lots of ice on ground (surface layer all ice)
+CCC             IF (iceThickness .GE. soilThickness) THEN
+CCC              surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+CCC     &   	  radTimeStep/cpOfIce/soilThickness
+CCC     &         /rhoOfIce*(qo-emissivity(i,j,bi,bj)*
+CCC     &         stephanBoltzmannConstant*
+CCC     &         surfaceTPrime(i,j,bi,bj)**4.)
+CCC             ELSE
+C some ice on top of some soil
+CCC              cpg=cpOfIce*(iceThickness/soilThickness)+
+CCC     &          cpOfSoil*((soilThickness-iceThickness)
+CCC     &           /soilThickness)
+CCC              rhog=rhoOfIce*(iceThickness/soilThickness)+
+CCC     &          rhoOfSoil*((soilThickness-iceThickness)
+CCC     &          /soilThickness)
+CCC              surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+CCC     &           radTimeStep/cpg/soilThickness
+CCC     &           /rhog*(qo-emissivity(i,j,bi,bj)*
+CCC     &          stephanBoltzmannConstant*
+CCC     &          surfaceTPrime(i,j,bi,bj)**4.)
+CCC             ENDIF
+CCC            ENDIF
+CCC           ENDIF
+CCC          ENDIF
+

@@ -1,0 +1,124 @@
+C!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+C
+C                            standard_h
+C
+C!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      _RL TAUCUM(L_LEVELS)
+      _RL SIGMA(L_LEVELS)
+      _RL PRDST(L_NPDST), TAUDST(L_NPDST)
+
+C     Spatially varying dust - TAUSURF(J,I) is the (visible 0.67 micron)
+C     dust opacity at the surface for each grid point
+C     TAUTOT added 6/28/01  GCM1.7
+C     TAUTOT is the dust opacity at the RPTAU reference pressure
+C     for each grid point.
+
+      _RL TAUTOT, RPTAU
+
+C     variables that were in bkdata.f
+C
+C   ALICEN  :  SURFACE ALBEDO FOR CO2 ICE ON GROUND - Northern cap
+C   ALICES  :  SURFACE ALBEDO FOR CO2 ICE ON GROUND - Southern cap
+C
+C   CP      :  HEAT CAPACITY (OR SPECIFIC HEAT) OF CO2 GAS.
+C                  ( UNITS OF JOULES PER ( KG * DEGREES KELVIN))
+C
+C   DECMAX  :  MAXIMUM SOLAR DECLINATION.
+C   DSIG    :  COORDINATE FOR ATM. LAYERS.
+C   DTM     :  UNROUNDED DEFAULT NUMBER OF MINUTES PER TIME STEP.
+C
+C   ECCN    :  ORBITAL ECCENTRICITY FOR MARS.
+C   EGOGND  :  EMISSIVITY OF BARE GROUND OUTSIDE 15 MICRON BAND WIDTH.
+C   EG15GND :  EMISSIVITY OF BARE GROUND INSIDE 15 MICRON BAND WIDTH.
+C   EG15CO2 :  EMISSIVITY OF GROUND WITH CO2 ICE INSIDE 15 MICRON BAND
+C                   WIDTH.
+C   EPS     :  SHEAR < EPS  MEANS  NEAR ZERO SHEAR.
+C     
+C   GRAV    :  ACCELERATION DUE TO GRAVITY (MKS)
+C
+C   IM      :  DEFAULT LONGITUDINAL DIMENSION OF GRID
+C   ISIZE   :  X DIMENSION OF GRID ARRAYS
+C     
+C   JM      :  DEFAULT LATITUDINAL DIMENSION OF GRID
+C   JSIZE   :  Y DIMENSION OF GRID ARRAYS
+C   
+C   KAPA    :  A THERMODYNAMIC CONSTANT.
+C   
+C   LAYERS  :  Z DIMENSION OF GRID ARRAYS
+C
+C   NCYCLE  :  DEFAULT NUMBER OF TIME STEPS PER TIME-STEPPING CYCLE.
+C                   (USED IN STEP.)
+C   NC3     :  THE FULL COMP3 ROUTINE IS EXECUTED ONLY ONCE PER NC3
+C                   TIME STEPS.
+C   NLAY    :  DEFAULT NUMBER OF ATMOSPHERIC LAYERS
+C   NSIZE2D :  SIZE OF 2-D GRID ARRAYS =ISIZE*JSIZE.
+C   NTAPE   :  Number of tape volume (ex. fort.11_032   NTAPE = 32)
+c              GCM1.7 update
+C     
+C   PI      :  THE MATHEMATICAL CONSTANT PI.
+C   PTROP   :  DEFAULT PRESSURE AT THE TROPOPAUSE.
+C   
+C   RAD     :  RADIUS OF MARS IN KM. CONVERTED TO METERS IN
+C                   SUBROUTINE INPUT.
+C   RGAS    :  GAS CONSTANT FOR MARS.
+C   ROT     :  ANGULAR (ROTATIONAL) VELOCITY OF MARS IN RADIANS
+C                   PER SECOND.
+C   ROTPER  :  ROTATIONAL PERIOD IN MARTIAN HOURS.
+C   RPTAU   :  Reference Pressure optical depth;  6.1 mbar for now
+C
+C   SCALEP  :  MULTIPLY BY 100 TO CONVERT PRESSURE FROM MILLIBARS
+C                   TO PASCALS.
+C   STBO    :  STEFAN-BOLTZMAN CONSTANT.
+C
+C   TAUCRT  :  ICE-CLOUD OPTICAL DEPTH
+C   TAUH    :  DEFAULT NUMBER OF HOURS BETWEEN WRITING OUTPUT TO HISTORY
+C                     TAPE.
+C   TAUID   :  DEFAULT STARTING DAY FOR A GCM RUN.
+C   TAUIH   :  DEFAULT STARTING HOUR FOR A GCM RUN.
+C   TAUTOT  :  TOTAL GLOBAL OPTICAL DEPTH
+C   TDINCR  :  MINIMUM AND INCREMENT VALUES
+C   TDMIN   :  FOR SETS OF DUST OPT. DEPTHS.
+C   THD     :  THERMAL DIFFUSIVITY
+C   TIINCR  :  MINIMUM AND INCREMENT VALUES
+C   TIMIN   :  FOR SET OF ICE OPT. DEPTHS.
+C
+C   end original bkdata.f comments
+
+C     THE C ARRAY IS A SMALLER RECORD-TYPE STRUCTURE USED TO GROUP
+C     TOGETHER A NUMBER OF GLOBALLY USED CONSTANTS.
+
+      _RL RSDIST
+
+      _RL dsig(L_LAYERS)
+      data dsig /3.2718E-07, 5.3944E-07, 8.8940E-07,
+     .           1.4663E-06, 2.4175E-06, 3.9859E-06,
+     .           6.5718E-06, 1.0835E-05, 1.7863E-05,
+     .           2.9452E-05, 4.8556E-05, 8.0060E-05,
+     .           1.3199E-04, 2.1763E-04, 3.5879E-04,
+     .           5.9155E-04, 9.7530E-04, 1.6080E-03,
+     .           2.6512E-03, 4.3714E-03, 7.2060E-03,
+     .           1.1882E-02, 1.9590E-02, 3.2298E-02,
+     .           5.3245E-02, 8.7800E-02, 1.4475E-01,
+     .           2.3865E-01, 3.9347017648E-01 /
+
+      _RL MWCO2,MWH2O,MWRATIO
+      PARAMETER(MWCO2 = 4.41E-2)
+      PARAMETER(MWH2O = 1.80153E-2)
+
+      INTEGER NPDST,LAYERS
+      PARAMETER(NPDST     = L_NPDST)
+      PARAMETER(LAYERS    = L_LAYERS)
+
+      INTEGER NLAY
+      PARAMETER(NLAY    = L_LAYERS)
+      _RL PSF
+      _RL PTROP
+C  Standard value = 0.03
+C     DATA  CONRNU / 0.03  /   ! Standard value  ~25km half-height
+C     DATA  CONRNU / 0.003 /   ! ~50 km half-height
+C     DATA  CONRNU / 0.5   /   ! ~10 km half-height
+
+      _RL CONRNU
+
+

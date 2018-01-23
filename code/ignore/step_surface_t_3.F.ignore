@@ -1,0 +1,198 @@
+#include "CPP_OPTIONS.h"
+
+C     !ROUTINE: STEP_SURFACE_T_3
+C     !INTERFACE:
+
+      SUBROUTINE STEP_SURFACE_T_3(i,j,bi,bj,myTime)
+
+C     !DESCRIPTION:
+C     *==========================================================*
+C     | SUBROUTINE STEP_SURFACE_T_3
+c     | ***THIS NEEDS TO BE MERGED WITH OTHER SURFACE FILES**
+C     | o Calculate surface temperature with a multilayer 
+C     |   subsurface.  Currently hardwired for Pluto/Triton,
+C     |   as we do not consider downward atmospheric flux
+C     |  author: amz
+C     *=========================================================
+
+      IMPLICIT NONE
+
+C     == Global variables
+#include "SIZE.h"
+#include "EEPARAMS.h"
+#include "PARAMS.h"
+#include "DYNVARS.h"
+#include "GRID.h"
+#include "AMZVARS.h"
+#include "SURFACE.h"
+#include "FFIELDS.h"
+
+C      == Local variables
+      INTEGER nsublayers,i,j,k,bi,bj
+      PARAMETER(nsublayers=24)   ! must be less than Nr
+      _RL gamma,lssol,qo,mv,Tv,myTime
+      _RL dtdv,mvnew,alpha,z(Nr)
+      _RL Tsubsfcnew(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nsublayers,nSx,nSy)
+      _RL delZ
+
+      INTEGER ki,ks
+      _RL delTau(Nr)
+      _RL termP(Nr),taucabC(Nr),taucabF(Nr+1)
+      _RL tauo
+
+#ifdef ALLOW_ADDFLUID
+       IF (lsIsConstant .EQ. 0) THEN
+        CALL GET_LS(myTime,lssol)
+       ELSE
+        lssol = lsperpetual
+       ENDIF
+
+C     Now calculate the solar heating, qo, in W/m^2
+       CALL GET_QO(i,j,bi,bj,lssol,myTime,solarconstant,
+     &                            albedoany(i,j,bi,bj),qo)
+
+C     Calculate optical depth, according to the Caballero
+C     et al. 2008 convention where the ground is 0 optical depth
+C     c.f. amz convention in get_teq (Mars only)
+      IF(radcode .EQ. 3 .OR. radcode .EQ. 4) THEN
+       DO k=1,Nr
+        taucabC(k)=tauinfcab*(1.-rC(k)/Ro_surf(i,j,bi,bj))
+        taucabF(k)=tauinfcab*(1.-rF(k)/Ro_surf(i,j,bi,bj))
+       ENDDO
+       taucabF(Nr+1)=tauinfcab*(1.-rF(Nr+1)/Ro_surf(i,j,bi,bj))
+       DO k=1,Nr
+        deltau(k)=taucabF(k+1)-taucabF(k)
+       ENDDO
+
+       DO k=1,Nr
+        termP(k)=rC(k)*(Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj))
+     &           /Ro_surf(i,j,bi,bj)
+       ENDDO
+
+C     atmospheric downward IR flux
+
+       ks=kSurfC(i,j,bi,bj)
+       iMinus0=0.
+       DO k=ks,Nr
+        iMinus0=iMinus0+stephanBoltzmannConstant*
+     &            theta(i,j,k,bi,bj)**4.*
+     &          ((termP(k)/atm_po)**atm_kappa)**4.*
+     &          EXP(-(taucabC(k)-0.)/betacab)
+     &           *deltau(k)
+       ENDDO
+      ELSE  !Pluto
+       iMinus0=0.
+      ENDIF
+
+
+
+      gamma=(rhoOfSoil*cpOfSoil*subsfccond)**0.5
+      delZ=0.25*subsfccond/gamma/(ABS(omega)**0.5)
+      z(1)=delZ/2.
+      DO k=2,nsublayers
+       z(k)=z(k-1)+delZ
+      ENDDO
+
+      IF(selectAddFluid .EQ.1) THEN
+C no ice on ground (surface layer all soil)
+       IF (massonground(i,j,bi,bj) .LE. 0) THEN
+        surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)
+     &   + radTimeStep/cpOfSoil/delZ
+     &    /rhoOfSoil*(qo+iMinus0-emissivity(i,j,bi,bj)*
+     &    stephanBoltzmannConstant*
+     &    surfaceTPrime(i,j,bi,bj)**4.
+     &    -subsfccond/delZ*
+     &    (surfaceTPrime(i,j,bi,bj)-
+     &    Tsubsfc(i,j,1,bi,bj)))
+        Tv=(1./referenceTempInFrostEqn-atm_rd/atm_L*
+     &   log((Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj))
+     &   /referencePresInFrostEqn))**(-1.)
+        IF(surfaceT(i,j,bi,bj) .LT. Tv) THEN
+         dtdv=-(1./referenceTempInFrostEqn-atm_rd/atm_L*
+     &    log((Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj))
+     &    /referencePresInFrostEqn))**(-2.)*
+     &    (-atm_Rd/atm_L/(Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj)))
+         mv=massonground(i,j,bi,bj)*deltaT/rA(i,j,bi,bj)
+         mvnew=mv-(surfaceT(i,j,bi,bj)-Tv)/gravity/dtdv
+         addMass(i,j,1,bi,bj)=-(mvnew-mv)/deltaT
+         massonground(i,j,bi,bj)=massonground(i,j,bi,bj)+
+     &    (mvnew-mv)
+         emissivity(i,j,bi,bj)=emissivityOfIce
+         albedoany(i,j,bi,bj)=albedoIce
+        ELSE
+         addMass(i,j,1,bi,bj)=0.
+         emissivity(i,j,bi,bj)=emissivityOfLand
+         albedoany(i,j,bi,bj)=albedoLand
+        ENDIF
+       ELSE
+        mv=massonground(i,j,bi,bj)*deltaT/rA(i,j,bi,bj)
+        Tv=(1./referenceTempInFrostEqn-atm_rd/atm_L*
+     &   log((Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj))
+     &   /referencePresInFrostEqn))**(-1.)
+        dtdv=-(1./referenceTempInFrostEqn-atm_rd/atm_L*
+     &   log((Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj))
+     &   /referencePresInFrostEqn))**(-2.)*
+     &   (-atm_Rd/atm_L/(Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj)))
+        surfaceT(i,j,bi,bj)=(qo+iMinus0-emissivity(i,j,bi,bj)
+     &   *stephanBoltzmannConstant*surfaceTPrime(i,j,bi,bj)**4.
+     &   -subsfccond/delZ*(surfaceTPrime(i,j,bi,bj)-
+     &   Tsubsfc(i,j,1,bi,bj))-atm_L*Tv/gravity/deltaT/dtdv)/
+     &   (cpOfIce*mv/deltaT-atm_L/gravity/deltaT/dtdv)
+        mvnew=mv-(surfaceT(i,j,bi,bj)-Tv)/gravity/dtdv
+        massonground(i,j,bi,bj)=massonground(i,j,bi,bj)+
+     &   (mvnew-mv)
+        IF(massonground(i,j,bi,bj) .LE. 0.) THEN
+         surfaceT(i,j,bi,bj)=Tv-(mvnew-mv)*gravity*dtdv
+         addMass(i,j,1,bi,bj)=mv/deltaT
+         emissivity(i,j,bi,bj)=emissivityOfLand
+         albedoany(i,j,bi,bj)=albedoLand
+         massonground(i,j,bi,bj)=0.
+        ELSE
+         addMass(i,j,1,bi,bj)=-(mvnew-mv)/deltaT
+         emissivity(i,j,bi,bj)=emissivityOfIce
+         albedoany(i,j,bi,bj)=albedoIce
+        ENDIF
+       ENDIF
+      ELSE
+       surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+     &    radTimeStep/cpOfSoil/delZ
+     &    /rhoOfSoil*(qo+iMinus0-emissivity(i,j,bi,bj)*
+     &    stephanBoltzmannConstant*
+     &    surfaceTPrime(i,j,bi,bj)**4.
+     &    -subsfccond/delZ*
+     &    (surfaceTPrime(i,j,bi,bj)-
+     &    Tsubsfc(i,j,1,bi,bj)))
+      ENDIF
+C       write(*,*) 'i=',i,', j=',j,', bi',bi,', bj',bj
+C       write(*,*) surfaceT(i,j,bi,bj),surfaceTPrime(i,j,bi,bj),
+C        write(*,*) rhoOfSoil
+C     &    radTimeStep,cpOfSoil,delZ,rhoOfSoil,qo,
+c     &    emissivity(i,j,bi,bj),stephanBoltzmannConstant,
+c     &    subsfccond,Tsubsfc(i,j,1,bi,bj)
+
+        surfaceTPrime(i,j,bi,bj)=surfaceT(i,j,bi,bj)
+
+C Now for the subsurface
+      alpha=subsfccond*deltaT/rhoOfSoil/cpOfSoil/delz**2.
+       Tsubsfcnew(i,j,1,bi,bj)=alpha*Tsubsfc(i,j,2,bi,bj)+
+     & (1.-2.*alpha)*Tsubsfc(i,j,1,bi,bj)
+     & +alpha*surfaceTPrime(i,j,bi,bj)
+       DO k=2,nsublayers-1
+        Tsubsfcnew(i,j,k,bi,bj)=alpha*Tsubsfc(i,j,k+1,bi,bj)
+     &  +(1.-2.*alpha)*Tsubsfc(i,j,k,bi,bj)
+     &  +alpha*Tsubsfc(i,j,k-1,bi,bj)
+       ENDDO
+C note bottom level is only 1 alpha
+      Tsubsfcnew(i,j,nsublayers,bi,bj)=
+     & (1.-alpha)*Tsubsfc(i,j,nsublayers,bi,bj)
+     & +alpha*Tsubsfc(i,j,nsublayers-1,bi,bj)
+
+
+      DO k=1,nsublayers
+       Tsubsfc(i,j,k,bi,bj)=Tsubsfcnew(i,j,k,bi,bj)
+      ENDDO
+
+#endif
+      RETURN
+      END
+

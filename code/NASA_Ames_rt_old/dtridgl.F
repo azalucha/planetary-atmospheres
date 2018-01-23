@@ -1,0 +1,45 @@
+#include "CPP_OPTIONS.h"
+      SUBROUTINE DTRIDGL(L,AF,BF,CF,DF,XK)
+
+C     GCM v23   2010
+C     Ames Mars GCM group
+C     Jeffery Hollingsworth, PI
+C     NASA Ames Research Center
+
+      implicit none
+#include "EEPARAMS.h"
+C     DOUBLE PRESCISION VERSION OF TRIDGL
+
+      integer NMAX
+      parameter(NMAX = 201)
+      integer L, I
+
+      _RL  AF(L),BF(L),CF(L),DF(L),XK(L)
+      _RL  AS(NMAX),DS(NMAX), X, XKB
+
+C*    THIS SUBROUTINE SOLVES A SYSTEM OF TRIDIAGIONAL MATRIX
+C*    EQUATIONS. THE FORM OF THE EQUATIONS ARE:
+C*    A(I)*X(I-1) + B(I)*X(I) + C(I)*X(I+1) = D(I)
+C*    WHERE I=1,L  LESS THAN 103.
+C* ..............REVIEWED -CP........
+
+C======================================================================C
+
+      AS(L) = AF(L)/BF(L)
+      DS(L) = DF(L)/BF(L)
+
+      DO I=2,L
+        X         = 1./(BF(L+1-I) - CF(L+1-I)*AS(L+2-I))
+        AS(L+1-I) = AF(L+1-I)*X
+        DS(L+1-I) = (DF(L+1-I)-CF(L+1-I)*DS(L+2-I))*X
+      END DO
+ 
+      XK(1)=DS(1)
+      DO I=2,L
+        XKB   = XK(I-1)
+        XK(I) = DS(I)-AS(I)*XKB
+      END DO
+
+      RETURN
+C      end subroutine dtridgl
+      END

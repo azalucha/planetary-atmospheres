@@ -1,0 +1,142 @@
+#include "CPP_OPTIONS.h"
+
+C     !ROUTINE: STEP_SURFACE_T
+C     !INTERFACE:
+
+      SUBROUTINE STEP_SURFACE_T(i,j,bi,bj,myTime)             
+
+C     !DESCRIPTION:
+C     *==========================================================*
+C     | SUBROUTINE STEP_SURFACE_T
+c     | *****THIS NEEDS TO BE MERGED WITH GET_FROZEN_MASS_SURF.f**
+C     | o Calculate surface temperature, not in radiative 
+C     |   equilibrium.  This routine is only called for radcodes
+C     |   3 and 4.  SURFACE SLAB MODEL.
+C     |  author: amz
+C     *==========================================================*
+
+      IMPLICIT NONE
+
+C     == Global variables
+#include "SIZE.h"
+#include "EEPARAMS.h"
+#include "PARAMS.h"
+#include "DYNVARS.h"
+#include "GRID.h"
+#include "AMZVARS.h"
+
+C     !INPUT/OUTPUT PARAMETERS:
+C     == Routine arguments ==
+C     bi,bj     :: Current tile indices
+C     myTime    :: Current time in simulation
+C     i,j       :: Indices on tile
+
+
+      INTEGER bi, bj, k,i,j,ki,ks
+      _RL lssol,qo,myTime,delTau(Nr)
+      _RL termP(Nr),taucabC(Nr),taucabF(Nr+1) 
+      _RL iceThickness,cp,rho
+      _RL downwardsolarflux,tauo
+
+C     Begin equations
+      IF (radcode .EQ. 3 .OR. radcode .EQ. 4 .OR. 
+     &                initrad(i,j,bi,bj) .EQ. 1.) THEN
+       IF (lsIsConstant .EQ. 0) THEN                 
+        CALL GET_LS(myTime,lssol)
+       ELSE         
+        lssol = lsperpetual
+       ENDIF
+
+C     Now calculate the solar heating, qo, in W/m^2
+       CALL GET_QO(i,j,bi,bj,lssol,myTime,solarconstant,
+     &                            albedoany(i,j,bi,bj),qo)
+       downwardsolarflux=qo
+      ELSE
+       downwardsolarflux=fdowndust0(i,j,bi,bj)
+      ENDIF
+
+C     Calculate optical depth, according to the Caballero
+C     et al. 2008 convention where the ground is 0 optical depth
+C     c.f. amz convention in get_teq
+      DO k=1,Nr
+        taucabC(k)=tauinfcab*(1.-rC(k)/Ro_surf(i,j,bi,bj))
+        taucabF(k)=tauinfcab*(1.-rF(k)/Ro_surf(i,j,bi,bj))
+      ENDDO
+      taucabF(Nr+1)=tauinfcab*(1.-rF(Nr+1)/Ro_surf(i,j,bi,bj))
+      DO k=1,Nr
+        deltau(k)=taucabF(k+1)-taucabF(k)
+      ENDDO
+
+      DO k=1,Nr
+       IF(selectAddFluid.EQ.0) THEN
+         termP(k)=rC(k)
+       ELSE
+   	termP(k)=rC(k)*(Ro_surf(i,j,bi,bj)+etaN(i,j,bi,bj))
+     &           /Ro_surf(i,j,bi,bj)
+       ENDIF
+      ENDDO
+
+
+
+C     atmospheric downward IR flux 
+
+      ks=kSurfC(i,j,bi,bj)
+      iMinus0=0.
+      DO k=ks,Nr
+       iMinus0=iMinus0+stephanBoltzmannConstant*
+     &            theta(i,j,k,bi,bj)**4.*           
+     &          ((termP(k)/atm_po)**atm_kappa)**4.*
+     &          EXP(-(taucabC(k)-0.)/betacab)
+     &           *deltau(k)
+      ENDDO
+
+      IF(selectAddFluid .EQ. 0) THEN
+        surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+     &     radTimeStep/cpOfSoil/soilThickness
+     &    /rhoOfSoil*(downwardsolarflux
+     &        +iMinus0-emissivity(i,j,bi,bj)*
+     &     stephanBoltzmannConstant*
+     &     surfaceTPrime(i,j,bi,bj)**4.
+     &     +fdownduste0(i,j,bi,bj))
+      ELSE
+       iceThickness=massonground(i,j,bi,bj)/
+     &   rA(i,j,bi,bj)*deltaT/rhoOfIce
+C no ice on ground (surface layer all soil)
+       IF (iceThickness .LE. 0.) THEN
+        surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+     &     radTimeStep/cpOfSoil/soilThickness
+     &    /rhoOfSoil*(downwardsolarflux
+     &        +iMinus0-emissivity(i,j,bi,bj)*
+     &     stephanBoltzmannConstant*
+     &     surfaceTPrime(i,j,bi,bj)**4.
+     &     +fdownduste0(i,j,bi,bj))
+       ELSE
+        cpOfIce=349.+ 4.8*surfaceTPrime(i,j,bi,bj)
+C lots of ice on ground	(surface layer all ice)
+        IF (iceThickness .GE. soilThickness) THEN
+         surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+     &     radTimeStep/cpOfIce/soilThickness
+     &    /rhoOfIce*(downwardsolarflux
+     &        +iMinus0-emissivity(i,j,bi,bj)*
+     &     stephanBoltzmannConstant*
+     &     surfaceTPrime(i,j,bi,bj)**4.
+     &     +fdownduste0(i,j,bi,bj))
+        ELSE
+C some ice on top of some soil
+         cp=cpOfIce*(iceThickness/soilThickness)+
+     &       cpOfSoil*((soilThickness-iceThickness)/soilThickness)
+         rho=rhoOfIce*(iceThickness/soilThickness)+
+     & 	    rhoOfSoil*((soilThickness-iceThickness)/soilThickness)
+         surfaceT(i,j,bi,bj)=surfaceTPrime(i,j,bi,bj)+
+     &     radTimeStep/cp/soilThickness
+     &     /rho*(downwardsolarflux
+     &        +iMinus0-emissivity(i,j,bi,bj)*
+     &     stephanBoltzmannConstant*
+     &     surfaceTPrime(i,j,bi,bj)**4.
+     &     +fdownduste0(i,j,bi,bj))
+        ENDIF
+       ENDIF
+      ENDIF
+
+      RETURN
+      END
